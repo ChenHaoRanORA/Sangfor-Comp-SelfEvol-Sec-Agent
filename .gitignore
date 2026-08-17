@@ -1,0 +1,36 @@
+# Python 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+*.venv
+venv.bak/
+
+# Conda 环境
+envs/
+conda-env/
+
+# python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 依赖缓存
+pip-wheel-metadata/
+
+# 密钥、环境变量
+.env
+*.key
+
+# 日志文件
+*.log
+
+# 虚拟机镜像
+*.ova
+*.vdi
+*.vmdk
+
+# 数据库本地持久化文件
+chroma_db/
+neo4j_data/
