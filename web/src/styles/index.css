@@ -1,0 +1,165 @@
+/* ============================================================
+   SCSSA 前端全局主题（深色科技风）
+   ============================================================ */
+:root {
+  /* 语义色板 */
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --high: #fb923c;
+  --crit: #f87171;
+  --info: #38bdf8;
+
+  /* 深色科技底色 */
+  --bg-deep: #050b16;
+  --bg-page: #070f1d;
+  --bg-panel: rgba(11, 24, 45, 0.82);
+  --bg-panel-solid: #0c1830;
+  --bg-elev: #122244;
+  --line-soft: rgba(125, 179, 255, 0.14);
+  --line: rgba(56, 189, 248, 0.32);
+  --accent: #22d3ee;
+  --accent-2: #3b82f6;
+  --txt-strong: #e6f2ff;
+  --txt: #9fb6d8;
+  --txt-dim: #5f7ba6;
+  --mono: ui-monospace, 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-deep);
+  color: var(--txt-strong);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'PingFang SC',
+    'Microsoft YaHei',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Element Plus 深色变量覆盖，贴合深蓝科技底色 ---- */
+html.dark {
+  --el-bg-color: #0b1730;
+  --el-bg-color-overlay: #101d3a;
+  --el-bg-color-page: #070f1d;
+  --el-fill-color-blank: #0b1730;
+  --el-fill-color-light: #122244;
+  --el-fill-color-lighter: #142a4d;
+  --el-border-color: rgba(125, 179, 255, 0.24);
+  --el-border-color-light: rgba(125, 179, 255, 0.18);
+  --el-border-color-lighter: rgba(125, 179, 255, 0.12);
+  --el-border-color-extra-light: rgba(125, 179, 255, 0.08);
+  --el-text-color-primary: #e6f2ff;
+  --el-text-color-regular: #b7cbe9;
+  --el-text-color-secondary: #7d97bf;
+  --el-text-color-placeholder: #51698f;
+  --el-color-primary: #22d3ee;
+  --el-color-success: #34d399;
+  --el-color-warning: #fbbf24;
+  --el-color-danger: #f87171;
+  --el-color-info: #38bdf8;
+  --el-mask-color: rgba(3, 8, 18, 0.7);
+}
+
+/* ---- 通用面板（大屏 + 后台复用） ---- */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  position: relative;
+  box-shadow: inset 0 0 24px rgba(34, 211, 238, 0.03);
+}
+.panel::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 26px;
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--txt-strong);
+  border-bottom: 1px solid var(--line-soft);
+}
+.panel-title .bar {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  transform: rotate(45deg);
+  flex: none;
+}
+.panel-body {
+  padding: 10px 14px;
+}
+
+/* ---- 通用工具类 ---- */
+.mono {
+  font-family: var(--mono);
+}
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.link {
+  color: var(--accent);
+  cursor: pointer;
+}
+.link:hover {
+  color: #67e8f9;
+}
+.text-dim {
+  color: var(--txt-dim);
+}
+.ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sev-Low { color: var(--ok); }
+.sev-Medium { color: var(--warn); }
+.sev-High { color: var(--high); }
+.sev-Critical { color: var(--crit); }
+
+/* Element 表格在深色下更通透 */
+.el-table {
+  --el-table-border-color: rgba(125, 179, 255, 0.1);
+  --el-table-header-bg-color: rgba(18, 34, 68, 0.6);
+  --el-table-tr-bg-color: transparent;
+  --el-table-row-hover-bg-color: rgba(34, 211, 238, 0.06);
+}
+.el-dialog,
+.el-drawer {
+  --el-dialog-bg-color: #0d1a33;
+}

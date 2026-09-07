@@ -26,6 +26,13 @@ pip-wheel-metadata/
 # 日志文件
 *.log
 
+# Node / 前端依赖与构建产物
+node_modules/
+web/node_modules/
+dist/
+web/dist/
+web/.vite/
+
 # 虚拟机镜像
 *.ova
 *.vdi
@@ -34,3 +41,14 @@ pip-wheel-metadata/
 # 数据库本地持久化文件
 chroma_db/
 neo4j_data/
+
+# 本地临时依赖（沙箱临时安装目录）
+.deps/
+
+# Kùzu 图库（单文件，可从 STIX 源重建）
+data/kb/attack_kuzu
+
+# 大数据集与第三方资源（不入库，可按需下载）
+data/kb/enterprise-attack.json
+data/linux-APT-Dataset-2024.csv
+data/llm-soc-alert-triage-main/
