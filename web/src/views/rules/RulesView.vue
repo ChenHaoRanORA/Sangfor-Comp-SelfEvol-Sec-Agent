@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatLineRound, Plus } from '@element-plus/icons-vue'
 import { api, subscribeFeed } from '@/api'
@@ -12,6 +13,7 @@ const SEV_COLOR: Record<Severity, string> = {
   High: '#fb923c',
   Critical: '#f87171',
 }
+const router = useRouter()
 
 /* ---------- 列表 ---------- */
 const tab = ref<'manual' | 'derived'>('manual')
@@ -160,6 +162,39 @@ function openAudit(r: RuleItem) {
   auditVisible.value = true
 }
 
+/* ---------- 溯源抽屉（衍生规则 → 来源模式 → 证据片段） ---------- */
+interface FragLite { fragmentId: string; summary: string; host?: string; ts?: number; classification?: string }
+interface RuleTrace {
+  rule?: RuleItem
+  note?: string
+  pattern: {
+    patternId: string
+    dataset?: string
+    title?: string
+    description?: string
+    kind?: string
+    confidence?: number
+    hits?: number
+    ruleIds?: string[]
+    mitreTechniques?: string[]
+    mitreTactics?: string[]
+    supportingFragments?: FragLite[]
+  } | null
+}
+const traceVisible = ref(false)
+const traceLoading = ref(false)
+const trace = ref<RuleTrace | null>(null)
+async function openTrace(r: RuleItem) {
+  trace.value = null
+  traceVisible.value = true
+  traceLoading.value = true
+  try {
+    trace.value = await api.ruleTrace(r.ruleId)
+  } finally {
+    traceLoading.value = false
+  }
+}
+
 /* ---------- 轮询：演示自动演化可见性 ---------- */
 let poll: number | undefined
 let unsub: (() => void) | undefined
@@ -199,6 +234,9 @@ onBeforeUnmount(() => {
         <span class="text-dim" style="margin-left: 6px">{{ autoEvolve ? '开（每次变更留审计）' : '关（库冻结）' }}</span>
       </div>
       <div class="bar-spacer" />
+      <el-button type="warning" plain @click="router.push('/admin/suggestions')">
+        规则建议（人工拍板升格 / 拒绝）
+      </el-button>
       <el-button type="primary" plain @click="nlVisible = true">
         <el-icon style="margin-right: 4px"><ChatLineRound /></el-icon>NL 自然语言创建
       </el-button>
@@ -296,8 +334,11 @@ onBeforeUnmount(() => {
             <el-table-column label="最近变更" width="110">
               <template #default="{ row }"><span class="mono text-dim">{{ fmtAgo(row.updatedAt) }}</span></template>
             </el-table-column>
-            <el-table-column label="操作" width="90" fixed="right">
-              <template #default="{ row }"><el-button link size="small" @click="openAudit(row)">审计</el-button></template>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="openTrace(row)">溯源</el-button>
+                <el-button link size="small" @click="openAudit(row)">审计</el-button>
+              </template>
             </el-table-column>
           </el-table>
         </el-tab-pane>
@@ -411,6 +452,55 @@ onBeforeUnmount(() => {
             <div class="note">{{ e.note }}</div>
           </el-timeline-item>
         </el-timeline>
+      </template>
+    </el-drawer>
+
+    <!-- 溯源抽屉：衍生规则 → 来源模式 → 证据片段 -->
+    <el-drawer v-model="traceVisible" :title="`溯源链 · ${trace?.rule?.ruleId ?? ''}`" size="640px">
+      <div v-if="traceLoading" class="text-dim">溯源加载中…</div>
+      <template v-else-if="trace">
+        <div v-if="trace.note" class="text-dim" style="margin-bottom: 12px">{{ trace.note }}</div>
+        <div class="trace-title">衍生规则（顶层）</div>
+        <div v-if="trace.rule" class="trace-card">
+          <div class="tc-line"><span class="k">名称</span><b>{{ trace.rule.name }}</b></div>
+          <div class="tc-line"><span class="k">描述</span>{{ trace.rule.description }}</div>
+          <div class="tc-line"><span class="k">级别 / 状态</span>
+            <span :style="{ color: SEV_COLOR[trace.rule.severity as Severity] }">{{ trace.rule.severity }}</span>
+            <el-tag size="small" :type="trace.rule.state === 'paused' ? 'info' : 'success'" effect="plain" style="margin-left: 6px">{{ trace.rule.state }}</el-tag>
+            <span class="text-dim" style="margin-left: 6px">生效 {{ trace.rule.firedTimes }} 次</span>
+          </div>
+          <div class="tc-line"><span class="k">动作策略</span>{{ trace.rule.actionPolicy.maxTier }} · {{ trace.rule.actionPolicy.allow.join('/') || '仅通知' }}</div>
+        </div>
+        <template v-if="trace.pattern">
+          <el-divider style="margin: 14px 0" />
+          <div class="trace-title">来源模式（中间层 · Pattern）</div>
+          <div class="trace-card">
+            <div class="tc-line"><span class="k">模式</span><span class="mono">{{ trace.pattern.patternId }}</span></div>
+            <div class="tc-line"><span class="k">数据域 / 类型</span>{{ trace.pattern.dataset }}
+              <el-tag size="small" effect="plain" style="margin-left: 6px">{{ trace.pattern.kind }}</el-tag></div>
+            <div class="tc-line" v-if="trace.pattern.hits != null"><span class="k">支撑样本</span>{{ trace.pattern.hits }} 条命中 · 置信度 {{ Math.round((trace.pattern.confidence ?? 0.7) * 100) }}%</div>
+            <div class="tc-line" v-if="trace.pattern.description"><span class="k">说明</span>{{ trace.pattern.description }}</div>
+            <div class="tc-line" v-if="trace.pattern.ruleIds?.length"><span class="k">覆盖规则</span>
+              <el-tag v-for="rid in trace.pattern.ruleIds" :key="rid" size="small" type="info" effect="plain" style="margin-right: 4px">{{ rid }}</el-tag></div>
+            <div class="tc-line" v-if="trace.pattern.mitreTechniques?.length || trace.pattern.mitreTactics?.length"><span class="k">MITRE</span>
+              <el-tag v-for="t in trace.pattern.mitreTechniques?.slice(0, 8)" :key="t" size="small" type="danger" effect="plain" style="margin-right: 4px">{{ t }}</el-tag>
+              <el-tag v-for="t in trace.pattern.mitreTactics ?? []" :key="t" size="small" type="warning" effect="plain" style="margin-right: 4px">{{ t }}</el-tag></div>
+          </div>
+          <el-divider style="margin: 14px 0" />
+          <div class="trace-title">证据片段（底层 · Episodic Memory）
+            <span class="text-dim" style="font-weight: 400">共 {{ trace.pattern.supportingFragments?.length ?? 0 }} 条</span></div>
+          <div class="frag-list">
+            <div v-for="f in trace.pattern.supportingFragments" :key="f.fragmentId" class="frag-item">
+              <div class="fi-head">
+                <span class="mono">{{ f.fragmentId }}</span>
+                <span class="text-dim">{{ f.host }}</span>
+                <span class="text-dim" v-if="f.ts">{{ fmtAgo(f.ts) }}</span>
+              </div>
+              <div class="fi-sum">{{ f.summary }}</div>
+            </div>
+            <div v-if="!trace.pattern.supportingFragments?.length" class="text-dim">无证据片段</div>
+          </div>
+        </template>
       </template>
     </el-drawer>
   </div>
@@ -530,6 +620,60 @@ onBeforeUnmount(() => {
 .note {
   color: var(--txt);
   margin-top: 4px;
+  line-height: 1.6;
+}
+/* 溯源抽屉 */
+.trace-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--txt-dim);
+  margin-bottom: 8px;
+}
+.trace-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.tc-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0;
+  line-height: 1.5;
+  flex-wrap: wrap;
+}
+.tc-line .k {
+  flex: none;
+  width: 88px;
+  color: var(--txt-dim);
+  font-size: 12px;
+}
+.frag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow: auto;
+}
+.frag-item {
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid rgba(34, 211, 238, 0.5);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(4, 10, 22, 0.4);
+}
+.fi-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.fi-sum {
+  font-size: 12px;
+  color: var(--txt);
   line-height: 1.6;
 }
 </style>

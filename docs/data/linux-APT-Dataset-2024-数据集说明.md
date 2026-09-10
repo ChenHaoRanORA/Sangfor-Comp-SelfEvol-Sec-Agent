@@ -2,7 +2,7 @@
 
 > 本地文件：`data/linux-APT-Dataset-2024.csv`（198.7 MB）
 > 用途：为"自进化多维度服务器安全智能体"提供流式告警数据模拟与测试语料
-> 更新日期：2026-09-06
+> 更新日期：2026-09-07（预处理执行结果见 §6）
 
 ---
 
@@ -119,15 +119,15 @@
 
 | 项 | 实测值 | 说明 |
 |---|---|---|
-| 文件大小 | 198.7 MB | |
-| CSV 记录数 | 约 12.2 万行（含重复表头） | |
-| 表头 | **文件内多次重复**，各段列数 34~254 不等 | 多段 Kibana 导出直接拼接 |
-| 索引名覆盖 | `wazuh-alerts-4.x-2023.10.01 ~ 2024.01.0x` | 与论文时间窗一致 |
-| 事件族（已核对样本） | `sca`（19007 等）、`rootcheck`（510）、`dpkg`（2901/2902/2904）、`pam`（5501/5502/5402）、auditd 命令审计（80792，自定义规则）、web accesslog、syscheck(FIM) | |
+| 文件大小 | 198.7 MB（UTF-8，物理行 166,459） | |
+| CSV 逻辑记录数 | 122,563 条数据行 + 2 个表头段（csv.reader 口径，跨行引用字段已合并） | 其中**可靠对齐仅 9,357 行**，见 §6 |
+| 表头 | 实际只有 **2 段真实表头**：段1 为 123 列（rootcheck/sca 等），段2 为 82 列（audit 命令审计） | 其余约 **113,173 行无表头且列宽杂乱**，属拼接导出损坏，字段无法可靠归因 |
+| 索引名覆盖（可解析行） | `wazuh-alerts-4.x-2023.10.01 / 10.04 / 10.05`、`2024.01.03 / 01.04` | 2023.10.02~12 与 2024.01.01-02/05-07 的记录大部分落入不可归因区段 |
+| 事件族（清洗保留 9,357 行内分布） | `audit`(auditd 命令审计) 8,474、`sca` 380、`syslog` 345、`ossec` 72、`pam` 62、`local` 16、`kaspersky` 3、`web` 1、`stats` 1 | |
 | 标签列 | **无** General/Malicious 列 | 本文件是原始 combine 版，非 Processed 版 |
 
 **最大风险：直接整表 `pandas.read_csv` 会列错位。**
-实测证据：按首段 123 列表头解析全文件后，`rule.level` 列出现大量 `4294967295`（实为 audit 事件 `auid` 值）、`decoder.name` 列出现 `/usr/bin/dash` 等命令路径——不同导出段（不同表头、不同字段子集）被顺序拼接所致。因此程序化使用必须先清洗。
+实测证据：csv 流式解析后，仅"宽度 = 当前段表头列数"的行能通过语义校验（rule.id/level 数值合理、location 可辨识、id 数值化，通过率 99.65%）；其余 113,173 行宽度 34~286 不等、字段错位且多缺失表头 → 无法按列归因，**程序化使用必须做"表头对齐 + 语义校验 + 丢弃不可靠行"三步清洗**。本仓库已落地为 `scripts/preprocess_datasets.py`（见 §6）。
 
 ### 已识别的字段值编码/格式坑
 1. 数组字段为 JSON 字符串且双引号转义，如 `["syslog","dpkg","config_changed"]` → 需 `json.loads`。
@@ -151,7 +151,49 @@
 
 ---
 
-## 6. 参考链接
+## 6. 预处理执行结果（2026-09-07，离线完成）
+
+> 脚本：[scripts/preprocess_datasets.py](../../scripts/preprocess_datasets.py)（仅标准库，流式解析约 10 秒级）
+> 命令：`python scripts/preprocess_datasets.py linux-apt`（或 `all` 一次处理两份数据集）
+> 产物：`data/processed/linux_apt_alerts.jsonl`（25 MB，统一结构逐行 JSON）+ `data/processed/linux_apt_stats.json`
+
+### 6.1 清洗策略（对应 §4 的"三步清洗"）
+1. **表头对齐**：csv 流式解析，仅当行宽 = 当前段表头列数时才做列映射；
+2. **语义校验**：`rule.id`/`rule.level` 数值合理（0~16）、`location` 可辨识、告警 `id` 数值化，防错位行混入；
+3. **丢弃与统计**：错位/无表头/校验失败的行全部拒绝并计数，可复现。
+
+### 6.2 保留 9,357 条的构成与标签
+| 项 | 值 |
+|---|---|
+| 时间归一化 | 9,357/9,357 成功（epoch 整数/秒级浮点/Kibana 串三态统一为 `{ms, iso}`） |
+| 规则级别分布 | level 3：8,800；7：527；其余 5/6/8/9 少量 |
+| 可疑标签 `is_malicious` | **98 条可疑 / 9,259 条常规**（口径：规则级 MITRE 三元组 id/technique/tactic 非空；排除 `mitre_*tactics/techniques` 数组里的 SCA 合规映射噪声） |
+| 可疑事件族 | pam 42、syslog 32、ossec 20、audit_detections 3、web 1（典型：Valid Accounts/T1078、Sudo and Sudo Caching/T1545 等） |
+| 事件族覆盖 | audit 8,474、sca 380、syslog 345、ossec 72、pam 62…（auditd 命令审计为主） |
+| 覆盖索引 | 2023.10.01/04/05（sca/rootcheck/pam/dpkg/web）+ 2024.01.03/04（auditd） |
+
+### 6.3 统一记录结构（与 llm-soc 产物同构，供后续 Ingress/回放/规则引擎直接消费）
+```jsonc
+{
+  "dataset": "linux-apt", "alert_id": "...", "index": "wazuh-alerts-...",
+  "agent": {"id":"..","name":"..","ip":".."}, "os": "linux",
+  "time": {"ms": 1696418015493, "iso": "2023-10-04T19:13:35.493"}, "time_raw": "...",
+  "rule": {"id": 510, "level": 7, "description": "...", "groups": ["ossec","rootcheck"], "firedtimes": 1},
+  "mitre": {...} | null,
+  "decoder": {"name":"pam","parent":"pam"} | null,
+  "location": "/var/log/auth.log", "program": "sudo", "text": "<full_log 或规则描述>",
+  "priority": "low|medium|high|critical",
+  "verdict": {"is_malicious": false, "method": "rule_mitre_present"},
+  "extra": {"_source.data.file": "...", ...}   // 核心字段之外的原始列，保留原扁平路径
+}
+```
+
+### 6.4 局限与使用建议（重要）
+- 本产物只覆盖上表 5 个日期的**可靠可解析**部分；若需要全时间窗/Processed 版带 `General/Malicious` 监督标签的数据，请改取 Mendeley **Processed Version.xlsx** 或 Zenodo 17 个分日期文件（各自带表头、更规整），再套用本脚本逻辑。
+- `is_malicious=True` 仅按论文口径（规则级 MITRE 非空）推断，非人工真值；audit 命令审计绝大多数为常规运维（level 3）。
+- 时间无时区上下文，按原始字符串直接换算为 UTC-naive epoch，回放/排序足够，跨时区精确分析请回看 `time_raw`。
+
+## 7. 参考链接
 
 - Mendeley Data（Combine-CSV + Processed XLSX）：https://data.mendeley.com/datasets/5x68fv63sh/2
 - Zenodo（17 个日期文件）：https://zenodo.org/records/10685642

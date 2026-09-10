@@ -35,6 +35,12 @@ const router = createRouter({
           meta: { title: 'A3 审批' },
         },
         {
+          path: 'suggestions',
+          name: 'suggestions',
+          component: () => import('@/views/suggestions/SuggestionsView.vue'),
+          meta: { title: '规则建议' },
+        },
+        {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/settings/SettingsView.vue'),

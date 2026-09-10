@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { BellFilled, Checked, Monitor, Setting, SetUp } from '@element-plus/icons-vue'
+import { BellFilled, Checked, MagicStick, Monitor, Setting, SetUp } from '@element-plus/icons-vue'
 import { api } from '@/api'
 import { nowClock } from '@/utils/format'
 
@@ -14,6 +14,7 @@ let pollTimer: number | undefined
 const menus = [
   { path: '/admin/alerts', label: '告警历史', icon: markRaw(BellFilled) },
   { path: '/admin/rules', label: '规则管理', icon: markRaw(SetUp) },
+  { path: '/admin/suggestions', label: '规则建议', icon: markRaw(MagicStick) },
   { path: '/admin/approvals', label: 'A3 审批', icon: markRaw(Checked) },
   { path: '/admin/settings', label: '设置', icon: markRaw(Setting) },
 ]

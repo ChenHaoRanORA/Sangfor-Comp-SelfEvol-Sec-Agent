@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { api } from '@/api'
-import type { ActionRecord, Alert, Severity } from '@/api/types'
+import type { ActionRecord, Alert, AlertEvidence, Severity } from '@/api/types'
 import { fmtTime } from '@/utils/format'
 
 const props = defineProps<{ alertId: string | null }>()
@@ -12,6 +13,14 @@ const router = useRouter()
 const alert = ref<Alert | null>(null)
 const actions = ref<ActionRecord[]>([])
 const loading = ref(false)
+
+/* 证据面板 & 复核写回 */
+const evidence = ref<AlertEvidence | null>(null)
+const evLoading = ref(false)
+const revReason = ref('')
+const revPrio = ref('Medium')
+const revBy = ref('analyst')
+const revBusy = ref(false)
 
 const SEV_COLOR: Record<Severity, string> = {
   Low: '#34d399',
@@ -25,6 +34,18 @@ const open = computed({
   set: (v: boolean) => emit('update:alertId', v ? props.alertId : null),
 })
 
+async function loadEvidence(id: string) {
+  evLoading.value = true
+  evidence.value = null
+  try {
+    evidence.value = await api.alertEvidence(id)
+  } catch {
+    evidence.value = null
+  } finally {
+    evLoading.value = false
+  }
+}
+
 watch(
   () => props.alertId,
   async (id) => {
@@ -34,15 +55,27 @@ watch(
     const all = await api.actions()
     actions.value = all.filter((a) => alert.value?.actionIds.includes(a.actionId))
     loading.value = false
+    void loadEvidence(id)
   },
   { immediate: true },
 )
 
 async function review(cls: 'TP' | 'FP') {
-  if (!alert.value) return
-  await api.reviewAlert(alert.value.id, cls)
-  alert.value = await api.alert(alert.value.id)
-  emit('reviewed')
+  if (!alert.value || revBusy.value) return
+  revBusy.value = true
+  try {
+    alert.value = await api.reviewAlert(alert.value.id, cls, {
+      reason: revReason.value,
+      priority: revPrio.value,
+      by: revBy.value,
+    })
+    const fb = (alert.value as Alert & { feedback?: { fragmentId?: string } }).feedback
+    if (fb?.fragmentId) ElMessage.success(`已复核 ${cls} · 经验已写回多层记忆（feedback 片段 ${fb.fragmentId}）`)
+    else ElMessage.success(`已复核：${cls}`)
+    emit('reviewed')
+  } finally {
+    revBusy.value = false
+  }
 }
 
 function gotoApproval() {
@@ -127,6 +160,21 @@ function gotoApproval() {
         <p>该告警暂未进入 LLM 研判（低风险 / 规则直判归档），如需可人工复核。</p>
       </div>
 
+      <!-- 研判证据依据（实时检索 · 防泄漏） -->
+      <h4 class="sec">研判证据依据（记忆 + 模式 + ATT&CK，仅引用历史）</h4>
+      <div v-if="evLoading" class="text-dim" style="font-size: 12px">检索历史相似经验…</div>
+      <div v-else-if="evidence" class="ev-card">
+        <div class="ev-head">
+          <el-tag size="small" type="primary" effect="plain">相似片段 {{ evidence.counts.frags }}</el-tag>
+          <el-tag size="small" type="warning" effect="plain">可疑模式 {{ evidence.counts.patterns }}</el-tag>
+          <el-tag size="small" type="danger" effect="plain">图谱行 {{ evidence.counts.kb }}</el-tag>
+          <span class="text-dim ev-guard">{{ evidence.leakageGuard }}</span>
+        </div>
+        <pre v-if="evidence.evidenceText" class="ev-pre mono">{{ evidence.evidenceText }}</pre>
+        <div v-else class="text-dim">该告警之前的相似经验/模式为空（seq 太靠前或为全新行为）。</div>
+      </div>
+      <div v-else class="text-dim">证据检索不可用。</div>
+
       <!-- 动作记录 -->
       <h4 class="sec">动作记录（分级自主行动 A0–A3）</h4>
       <el-table v-if="actions.length" :data="actions" size="small" class="mini-table">
@@ -160,9 +208,18 @@ function gotoApproval() {
       <div v-else class="text-dim">无关联模式/片段</div>
 
       <!-- 底部操作 -->
+      <div class="rev-box">
+        <el-input v-model="revReason" size="small" placeholder="复核理由（将随 feedback 片段写回多层记忆）" clearable />
+        <div class="rev-meta">
+          <el-select v-model="revPrio" size="small" style="width: 120px">
+            <el-option v-for="s in ['Low', 'Medium', 'High', 'Critical']" :key="s" :label="s" :value="s" />
+          </el-select>
+          <el-input v-model="revBy" size="small" style="width: 130px" placeholder="复核人" />
+        </div>
+      </div>
       <div class="foot-actions">
-        <el-button @click="review('FP')" :disabled="alert.verdict?.classification === 'FP'">复核：误报（回传降噪）</el-button>
-        <el-button type="danger" plain @click="review('TP')" :disabled="alert.verdict?.classification === 'TP'">复核：确认威胁</el-button>
+        <el-button :disabled="revBusy || alert.verdict?.classification === 'FP'" @click="review('FP')">复核：误报（回传降噪）</el-button>
+        <el-button type="danger" plain :disabled="revBusy || alert.verdict?.classification === 'TP'" @click="review('TP')">复核：确认威胁</el-button>
         <el-button v-if="actions.some((a) => a.tier === 'A3' && a.status === 'pending')" type="primary" @click="gotoApproval">
           去审批 A3 动作
         </el-button>
@@ -324,7 +381,7 @@ function gotoApproval() {
   font-size: 11px;
 }
 .foot-actions {
-  margin-top: 20px;
+  margin-top: 10px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -333,4 +390,45 @@ function gotoApproval() {
 .st-pend { color: var(--warn); }
 .st-no { color: var(--txt-dim); }
 .st-fail { color: var(--crit); }
+.ev-card {
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid rgba(34, 211, 238, 0.45);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(4, 10, 22, 0.35);
+}
+.ev-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.ev-guard {
+  margin-left: auto;
+  font-size: 11px;
+}
+.ev-pre {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #b7cbe9;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 34vh;
+  overflow: auto;
+}
+.rev-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.rev-meta {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
 </style>

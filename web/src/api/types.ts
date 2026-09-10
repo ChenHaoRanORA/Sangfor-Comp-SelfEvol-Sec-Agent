@@ -112,6 +112,44 @@ export interface RuleItem {
   auto: boolean
 }
 
+/** 规则建议解释来源：llm=大模型总结；template=LLM 不可用时的证据拼装摘要 */
+export type ExplainSource = 'llm' | 'template'
+
+/** 待升格人工规则候选验证统计（规格 D：经验证有含金量的可疑模式 → 用户拍板） */
+export interface PromoteValidation {
+  firedTimes: number
+  patternHits: number
+  confidence?: number | null
+  supportFragments: number
+  feedbackFragments: number
+}
+
+export interface RulePromoteCandidate extends RuleItem {
+  promoteFromPatternId?: string
+  promoteFromPatternTitle?: string
+  validation?: PromoteValidation
+  /** 大模型总结的『为什么建议新增』自然语言解释（可能为空，需前端按需生成） */
+  explain?: string
+  explainSource?: ExplainSource | ''
+}
+
+export interface RuleSuggestExplain {
+  ruleId: string
+  text: string
+  source: ExplainSource
+  cached: boolean
+}
+
+/** 告警实时证据（记忆相似片段 + 命中模式 + 图谱多跳，seq 流式防泄漏） */
+export interface AlertEvidence {
+  alertId: string
+  dataset: string
+  seq: number
+  leakageGuard: string
+  counts: { frags: number; patterns: number; kb: number }
+  evidenceText: string
+}
+
 export type ActionStatus = 'pending' | 'done' | 'denied' | 'failed'
 
 export interface ActionRecord {

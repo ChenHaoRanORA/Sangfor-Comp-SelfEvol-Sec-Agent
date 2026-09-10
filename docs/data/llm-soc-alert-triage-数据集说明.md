@@ -3,7 +3,7 @@
 > 本地路径：`data/llm-soc-alert-triage-main/`
 > 用途：为"自进化多维度服务器安全智能体"提供带监督标签的告警研判（TP/FP 分类 + 优先级）评测集与复现基线
 > 来源仓库：https://github.com/c0deing/llm-soc-alert-triage （MIT License）
-> 更新日期：2026-09-06
+> 更新日期：2026-09-07（预处理执行结果见 §9）
 
 ---
 
@@ -184,7 +184,27 @@ ML_baseline_scripts/
 
 ---
 
-## 9. 参考链接
+## 9. 预处理执行结果（2026-09-07，离线完成）
+
+> 脚本：[scripts/preprocess_datasets.py](../../scripts/preprocess_datasets.py)；命令：`python scripts/preprocess_datasets.py llm-soc`
+> 输入：官方 `Data/2_Merged/2_alerts_preprocessed_merged_*.jsonl`（178 条，喂给论文各 LLM 的最终语料）
+> 产物：`data/processed/llm_soc_alerts.jsonl`（1.0 MB，统一结构逐行 JSON）+ `data/processed/llm_soc_stats.json`
+
+本步**不改写官方标签**，只把 178 条转成与 `linux_apt_alerts.jsonl` **同构的统一 Alert 结构**，便于后续 Ingress/回放/评测直接使用：
+
+| 项 | 处理结果 |
+|---|---|
+| 分类 ground truth | `verdict.label`：**TP 104 / FP 74**（官方人工标签原样保留） |
+| 优先级 ground truth | `verdict.gt_priority`：Low 136 / Medium 12 / High 25 / Critical 5（官方 rule_priority 原样保留） |
+| `rule.level` | 保留官方 `rule_level`（注意：官方已从 `alert` 内移除 `rule.level`，防"抄答案"；本步不改动该公平性设计） |
+| 时间归一化 | **178/178 成功**：`2025-07-04T16:05:49.052+0000` → `{ms, iso}`（UTC） |
+| 研判输入 `text` | 优先 Sysmon `data.win.system.message` 事件原文 → 其次 `full_log` → 否则规则描述；去掉 `rule.level` 泄露的成品原文 |
+| 原始告警 | 完整保留在 `extra.raw_alert`（即官方清洗后的 `alert` JSON），用于复现论文提示词评测 |
+| OS 覆盖 | Windows 143（Sysmon/AD）、Linux 22、其他 13（Suricata/靶场类） |
+
+记录顶层字段与 linux-APT 产物一致：`dataset / alert_id / index / agent / os / time / rule / mitre / text / priority / verdict / extra`。用途上本文件就是"178 条 LLM 研判离线评测基准 + 人工标签源"，见 §1、§7。
+
+## 10. 参考链接
 
 - GitHub 仓库：https://github.com/c0deing/llm-soc-alert-triage
 - 论文 DOI：https://doi.org/10.1016/j.eswa.2026.133194

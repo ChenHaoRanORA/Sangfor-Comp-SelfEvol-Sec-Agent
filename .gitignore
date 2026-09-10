@@ -19,19 +19,37 @@ __pycache__/
 # 依赖缓存
 pip-wheel-metadata/
 
+# 测试 / 类型检查 / 覆盖率缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
 # 密钥、环境变量
 .env
 *.key
 
+# 操作系统 / 编辑器残留
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+
 # 日志文件
 *.log
+log/
 
 # Node / 前端依赖与构建产物
 node_modules/
 web/node_modules/
-dist/
 web/dist/
 web/.vite/
+
+# 打包产物（PyInstaller：dist/ 为分发目录，build/ 为中间产物）
+dist/
+build/
 
 # 虚拟机镜像
 *.ova
@@ -52,3 +70,12 @@ data/kb/attack_kuzu
 data/kb/enterprise-attack.json
 data/linux-APT-Dataset-2024.csv
 data/llm-soc-alert-triage-main/
+
+# 预处理产物（可由 scripts/preprocess_datasets.py 重新生成）
+data/processed/
+
+# 多层记忆库（SQLite + Chroma，可由 scripts/build_memory_baseline.py 与 run_evolve_baseline.py 重建）
+data/memory/
+
+# 打包分发资源（Chroma ONNX 向量模型，可从 ~/.cache/chroma 复制）
+models/
